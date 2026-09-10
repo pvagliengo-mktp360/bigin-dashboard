@@ -114,7 +114,7 @@ with st.sidebar:
     subpipeline_field = "Sub_Pipeline"
     pipeline_objetivo = st.text_input(
         "Pipeline a analizar",
-        value="Alta de Cliente",
+        value="Alta de Clientes",
         help="El dashboard se enfoca en este pipeline únicamente. Debe coincidir "
              "exactamente con el valor que ves en Bigin.",
     ).strip()
@@ -208,13 +208,29 @@ if subpipeline_field in deals_filtrado.columns:
         xaxis_title="", yaxis_title="", plot_bgcolor=CARD, paper_bgcolor=CARD,
     )
     st.plotly_chart(fig_sub, use_container_width=True)
+
+    subprocesos_disponibles = ["Todos"] + sorted(
+        deals_filtrado[subpipeline_field].dropna().unique().tolist()
+    )
 else:
     st.caption(f"No encontré el campo '{subpipeline_field}' en los datos traídos.")
+    subprocesos_disponibles = ["Todos"]
+
+subproceso_elegido = st.selectbox(
+    "Filtrar el resto del panel por subproceso de venta",
+    subprocesos_disponibles,
+)
+
+if subproceso_elegido != "Todos" and subpipeline_field in deals_filtrado.columns:
+    deals_filtrado = deals_filtrado[deals_filtrado[subpipeline_field] == subproceso_elegido]
 
 # ---------------------------------------------------------------------------
 # 3. Desglose de fases
 # ---------------------------------------------------------------------------
-section("03 · Distribución", "Desglose de fases")
+titulo_fases = "Desglose de fases"
+if subproceso_elegido != "Todos":
+    titulo_fases += f" — {subproceso_elegido}"
+section("03 · Distribución", titulo_fases)
 
 if "Stage" in deals_filtrado.columns:
     conteo_stage = deals_filtrado["Stage"].value_counts().reset_index()

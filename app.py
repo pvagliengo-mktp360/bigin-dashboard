@@ -138,6 +138,17 @@ if deals_df.empty:
     )
     st.stop()
 
+
+def _normalizar_columna_lookup(df: pd.DataFrame, col: str) -> pd.DataFrame:
+    """Algunos campos de Bigin (como 'Pipeline') vienen como objetos
+    {id, name} en vez de texto simple. Esto extrae el nombre legible."""
+    if col in df.columns:
+        df[col] = df[col].apply(lambda v: v.get("name") if isinstance(v, dict) else v)
+    return df
+
+
+deals_df = _normalizar_columna_lookup(deals_df, pipeline_field)
+
 tiene_pipeline_field = bool(pipeline_field) and pipeline_field in deals_df.columns
 
 # ---------------------------------------------------------------------------

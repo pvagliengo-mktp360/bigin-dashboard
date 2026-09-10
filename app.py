@@ -104,7 +104,7 @@ with st.sidebar:
     st.markdown(f'<div class="eyebrow">Configuración</div>', unsafe_allow_html=True)
     fields_input = st.text_input(
         "Campos a traer (separados por coma)",
-        value="Deal_Name,Amount,Stage,Sub_Pipeline,Closing_Date,Created_Time",
+        value="Deal_Name,Amount,Stage,Pipeline,Closing_Date,Created_Time",
         help="Deben coincidir con los api_name reales de tu módulo Pipelines. "
              "Confirmalos en 'Debug / metadata', abajo de todo.",
     )
@@ -112,7 +112,7 @@ with st.sidebar:
 
     pipeline_field = st.text_input(
         "Campo que identifica el Pipeline",
-        value="Sub_Pipeline",
+        value="Pipeline",
         help="Nombre del campo que distingue distintos pipelines dentro de tu cuenta "
              "(a veces se llama 'Sub_Pipeline' o 'Pipeline'). Dejalo vacío si no aplica.",
     ).strip()

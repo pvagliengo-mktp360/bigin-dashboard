@@ -104,17 +104,19 @@ with st.sidebar:
     st.markdown(f'<div class="eyebrow">Configuración</div>', unsafe_allow_html=True)
     fields_input = st.text_input(
         "Campos a traer (separados por coma)",
-        value="Deal_Name,Amount,Stage,Pipeline,Closing_Date,Created_Time",
+        value="Deal_Name,Amount,Stage,Pipeline,Sub_Pipeline,Closing_Date,Created_Time",
         help="Deben coincidir con los api_name reales de tu módulo Pipelines. "
              "Confirmalos en 'Debug / metadata', abajo de todo.",
     )
     fields = [f.strip() for f in fields_input.split(",") if f.strip()]
 
-    pipeline_field = st.text_input(
-        "Campo que identifica el Pipeline",
-        value="Pipeline",
-        help="Nombre del campo que distingue distintos pipelines dentro de tu cuenta "
-             "(a veces se llama 'Sub_Pipeline' o 'Pipeline'). Dejalo vacío si no aplica.",
+    pipeline_field = "Pipeline"
+    subpipeline_field = "Sub_Pipeline"
+    pipeline_objetivo = st.text_input(
+        "Pipeline a analizar",
+        value="Alta de Cliente",
+        help="El dashboard se enfoca en este pipeline únicamente. Debe coincidir "
+             "exactamente con el valor que ves en Bigin.",
     ).strip()
 
     cargar = st.button("Cargar / refrescar datos", use_container_width=True)
@@ -148,66 +150,71 @@ def _normalizar_columna_lookup(df: pd.DataFrame, col: str) -> pd.DataFrame:
 
 
 deals_df = _normalizar_columna_lookup(deals_df, pipeline_field)
+deals_df = _normalizar_columna_lookup(deals_df, subpipeline_field)
 
-tiene_pipeline_field = bool(pipeline_field) and pipeline_field in deals_df.columns
+# Filtro fijo: solo el pipeline elegido
+if pipeline_field in deals_df.columns:
+    deals_filtrado = deals_df[
+        deals_df[pipeline_field].astype(str).str.strip().str.lower()
+        == pipeline_objetivo.strip().lower()
+    ]
+else:
+    deals_filtrado = deals_df
+    st.warning(f"No encontré el campo '{pipeline_field}' en los datos traídos.")
+
+if deals_filtrado.empty:
+    valores_reales = (
+        sorted(deals_df[pipeline_field].dropna().unique().tolist())
+        if pipeline_field in deals_df.columns else []
+    )
+    st.error(
+        f"No encontré ninguna oportunidad con Pipeline = '{pipeline_objetivo}'. "
+        f"Valores que sí existen: {valores_reales}"
+    )
+    st.stop()
 
 # ---------------------------------------------------------------------------
-# 1. Conteo de oportunidades (por pipeline)
+# 1. Conteo de oportunidades (pipeline fijo)
 # ---------------------------------------------------------------------------
-section("01 · Volumen", "Conteo de oportunidades por pipeline")
+section("01 · Volumen", f"Conteo de oportunidades — {pipeline_objetivo}")
 
-total_deals = len(deals_df)
-total_amount = deals_df["Amount"].sum() if "Amount" in deals_df.columns else None
-n_pipelines = deals_df[pipeline_field].nunique() if tiene_pipeline_field else None
+total_deals = len(deals_filtrado)
+total_amount = deals_filtrado["Amount"].sum() if "Amount" in deals_filtrado.columns else None
 
-k1, k2, k3 = st.columns(3)
+k1, k2 = st.columns(2)
 k1.metric("Total de oportunidades", f"{total_deals:,}")
 if total_amount is not None:
     k2.metric("Monto total", f"${total_amount:,.0f}")
-if n_pipelines is not None:
-    k3.metric("Pipelines distintos", n_pipelines)
 
-if tiene_pipeline_field:
-    conteo_pipe = deals_df[pipeline_field].fillna("Sin pipeline").value_counts().reset_index()
-    conteo_pipe.columns = ["Pipeline", "Cantidad"]
-    conteo_pipe = conteo_pipe.sort_values("Cantidad", ascending=True)
+# ---------------------------------------------------------------------------
+# 2. Desglose por Subproceso de venta
+# ---------------------------------------------------------------------------
+section("02 · Distribución", "Oportunidades por subproceso de venta")
 
-    fig_pipe = px.bar(
-        conteo_pipe, x="Cantidad", y="Pipeline", orientation="h",
+if subpipeline_field in deals_filtrado.columns:
+    conteo_sub = deals_filtrado[subpipeline_field].fillna("Sin subproceso").value_counts().reset_index()
+    conteo_sub.columns = ["Subproceso", "Cantidad"]
+    conteo_sub = conteo_sub.sort_values("Cantidad", ascending=True)
+
+    fig_sub = px.bar(
+        conteo_sub, x="Cantidad", y="Subproceso", orientation="h",
         color="Cantidad", color_continuous_scale=ESCALA_AZUL,
         text="Cantidad",
     )
-    fig_pipe.update_traces(textposition="outside")
-    fig_pipe.update_layout(
+    fig_sub.update_traces(textposition="outside")
+    fig_sub.update_layout(
         showlegend=False, coloraxis_showscale=False,
-        margin=dict(t=10, b=10), height=max(220, 40 * len(conteo_pipe)),
+        margin=dict(t=10, b=10), height=max(220, 40 * len(conteo_sub)),
         xaxis_title="", yaxis_title="", plot_bgcolor=CARD, paper_bgcolor=CARD,
     )
-    st.plotly_chart(fig_pipe, use_container_width=True)
-
-    pipelines_disponibles = ["Todos"] + sorted(deals_df[pipeline_field].dropna().unique().tolist())
+    st.plotly_chart(fig_sub, use_container_width=True)
 else:
-    st.caption(
-        f"No encontré el campo '{pipeline_field}' en los datos traídos — "
-        "revisá el nombre en la barra lateral o en 'Debug / metadata'."
-    )
-    pipelines_disponibles = ["Todos"]
-
-pipeline_elegido = (
-    st.selectbox("Filtrar el resto del panel por pipeline", pipelines_disponibles)
-    if len(pipelines_disponibles) > 1
-    else "Todos"
-)
-
-if pipeline_elegido != "Todos" and tiene_pipeline_field:
-    deals_filtrado = deals_df[deals_df[pipeline_field] == pipeline_elegido]
-else:
-    deals_filtrado = deals_df
+    st.caption(f"No encontré el campo '{subpipeline_field}' en los datos traídos.")
 
 # ---------------------------------------------------------------------------
-# 2. Desglose de fases por pipeline
+# 3. Desglose de fases
 # ---------------------------------------------------------------------------
-section("02 · Distribución", f"Desglose de fases{'' if pipeline_elegido == 'Todos' else f' — {pipeline_elegido}'}")
+section("03 · Distribución", "Desglose de fases")
 
 if "Stage" in deals_filtrado.columns:
     conteo_stage = deals_filtrado["Stage"].value_counts().reset_index()
@@ -235,7 +242,7 @@ with st.expander("Ver tabla completa de oportunidades"):
 # ---------------------------------------------------------------------------
 # 3. Tiempo entre fases (promedio de días)
 # ---------------------------------------------------------------------------
-section("03 · Velocidad", "Cantidad de días entre fases")
+section("04 · Velocidad", "Cantidad de días entre fases")
 st.caption("Calculado a partir del historial real de cada trato (Stage_History).")
 
 etapas_disponibles = (
